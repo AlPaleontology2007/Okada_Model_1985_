@@ -1,0 +1,165 @@
+def okada85(e, n, depth, strike, dip, L, W, U1, U2, U3, nu=0.25):
+    strike = strike*pi/180
+    delta  = dip*pi/180
+    x = sin(strike)*n + cos(strike)*e
+    y = cos(strike)*n - sin(strike)*e
+    p = y*cos(delta) + depth*sin(delta)
+    q = y*sin(delta) - depth*cos(delta)
+    ux = -U1/(2*pi) * chinnery(ux_ss,x,p,L,W,q,delta,nu) \
+        - U2/(2*pi) * chinnery(ux_ds,x,p,L,W,q,delta,nu) \
+        + U3/(2*pi) * chinnery(ux_tf,x,p,L,W,q,delta,nu)
+    uy = -U1/(2*pi) * chinnery(uy_ss,x,p,L,W,q,delta,nu) \
+        - U2/(2*pi) * chinnery(uy_ds,x,p,L,W,q,delta,nu) \
+        + U3/(2*pi) * chinnery(uy_tf,x,p,L,W,q,delta,nu)
+    uz = -U1/(2*pi) * chinnery(uz_ss,x,p,L,W,q,delta,nu) \
+        - U2/(2*pi) * chinnery(uz_ds,x,p,L,W,q,delta,nu) \
+        + U3/(2*pi) * chinnery(uz_tf,x,p,L,W,q,delta,nu)
+    ue = cos(strike)*ux - sin(strike)*uy
+    un = sin(strike)*ux + cos(strike)*uy
+    return (ue, un, uz)
+
+def chinnery(f, x, p, L, W, q, delta, nu):
+    return f(x,p,q,delta,nu) \
+         - f(x,p-W,q,delta,nu) \
+         - f(x-L,p,q,delta,nu) \
+         + f(x-L,p-W,q,delta,nu)
+
+def ux_tf(xi,eta,q,delta,nu):
+    R = sqrt(xi**2+eta**2+q**2)
+    return q**2/(R*(R+eta)) - I3(eta,q,delta,nu,R)*sin(delta)**2
+
+def uy_tf(xi,eta,q,delta,nu):
+    R = sqrt(xi**2+eta**2+q**2)
+    return -(eta*sin(delta)-q*cos(delta))*q/(R*(R+xi)) - sin(delta)*(xi*q/(R*(R+eta)) - atan((xi*eta)/(q*R))) - I1(xi,eta,q,delta,nu,R)*sin(delta)**2
+
+def uz_tf(xi,eta,q,delta,nu):
+    R  = sqrt(xi**2+eta**2+q**2)
+    db = eta*sin(delta) - q*cos(delta)
+    return (eta*cos(delta)+q*sin(delta))*q/(R*(R+xi)) + cos(delta)*(xi*q/(R*(R+eta)) - atan((xi*eta)/(q*R))) - I5(xi,eta,q,delta,nu,R,db)*sin(delta)**2
+
+def I1(xi,eta,q,delta,nu,R):
+    db = eta*sin(delta) - q*cos(delta)
+    if cos(delta) > eps:
+        return (1-2*nu)*(-xi/(cos(delta)*(R+db))) - sin(delta)/cos(delta)*I5(xi,eta,q,delta,nu,R,db)
+    else:
+        return -(1-2*nu)/2 * xi*q/(R+db)**2
+
+def I2(eta,q,delta,nu,R):
+    return (1-2*nu)*(-log(R+eta)) - I3(eta,q,delta,nu,R)
+
+def I3(eta,q,delta,nu,R):
+    yb = eta*cos(delta) + q*sin(delta)
+    db = eta*sin(delta) - q*cos(delta)
+    if cos(delta) > eps:
+        return (1-2*nu)*(yb/(cos(delta)*(R+db)) - log(R+eta)) + sin(delta)/cos(delta)*I4(db,eta,q,delta,nu,R)
+    else:
+        return (1-2*nu)/2*(eta/(R+db) + yb*q/(R+db)**2 - log(R+eta))
+
+def I4(db,eta,q,delta,nu,R):
+    if cos(delta) > eps:
+        return (1-2*nu)*1/cos(delta)*(log(R+db) - sin(delta)*log(R+eta))
+    else:
+        return -(1-2*nu)*q/(R+db)
+
+def I5(xi,eta,q,delta,nu,R,db):
+    X = sqrt(xi**2 + q**2)
+    if cos(delta) > eps:
+        return (1-2*nu)*2/cos(delta)*atan((eta*(X+q*cos(delta))+X*(R+X)*sin(delta))/(xi*(R+X)*cos(delta)))
+    else:
+        return -(1-2*nu)*xi*sin(delta)/(R+db)
+    rng = np.random.default_rng()
+
+# Depth of fault top edge (km)
+# Shallow enough to cause surface deformation, deep enough to avoid singularities
+depth = 10
+
+# Strike angle from North (degrees)
+# Full range of fault orientations
+strike = 200 
+
+# Dip angle (degrees)
+# 0 = horizontal fault (unrealistic), 90 = vertical fault
+# 15-90 covers all realistic fault types
+dip = 70
+
+# Fault length along strike (km)
+# Small local faults to large regional faults
+L = 15
+
+# Fault width down dip (km)
+# Always less than L, physically reasonable
+W = 7
+
+# Strike-slip component (m)
+# Negative = right-lateral, positive = left-lateral
+U1 = 0
+
+# Dip-slip component (m)
+# Negative = normal fault, positive = reverse fault
+U2 = 0
+
+# Tensile component (m)
+# Always positive = opening crack, 0 = pure shear fault
+# Much smaller than U1/U2 for tectonic faults
+U3 = 1
+
+
+
+# ── Grid ──────────────────────────────────────────────────────────
+
+x_m = np.linspace(-30, 30, 224)
+UE = np.zeros((224, 224))
+UN = np.zeros((224, 224))
+UZ = np.zeros((224, 224))
+
+for i, n_val in enumerate(x_m):
+    for j, e_val in enumerate(x_m):
+        try:
+            ue, un, uz = okada85(e_val, n_val, depth, strike, dip, L, W, U1, U2, U3)
+            UE[i,j] = ue
+            UN[i,j] = un
+            UZ[i,j] = uz
+        except:
+            pass
+
+# ── Plot ──────────────────────────────────────────────────────────
+
+fig, axes = plt.subplots(1, 3, figsize=(14, 5))
+fig.suptitle(
+    f'Okada 1985 | depth={depth:.1f}  strike={strike:.0f}  dip={dip:.0f}  '
+    f'L={L:.1f}  W={W:.1f}  U1={U1:.2f}  U2={U2:.2f}  U3={U3:.2f}',
+    fontsize=9)
+
+for ax, arr, title in zip(axes, [UE, UN, UZ], ['uE (m)', 'uN (m)', 'uZ (m)']):
+    im = ax.imshow(arr, cmap='RdBu_r', origin='upper')
+    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    ax.set_title(title)
+    ax.axis('off')
+
+plt.tight_layout()
+plt.savefig('okada_model.png', dpi=150, bbox_inches='tight')
+plt.show()
+
+# ================================================================
+# __________________ LOS PROJECTION _____________________________
+# ================================================================
+
+def compute_los(UE, UN, UZ, inc_deg=38.0, heading_deg=-166.0):
+    inc  = np.radians(inc_deg)
+    head = np.radians(heading_deg)
+    eE =  np.sin(inc) * np.sin(head)
+    eN = -np.sin(inc) * np.cos(head)
+    eZ =  np.cos(inc)
+    return eE*UE + eN*UN + eZ*UZ
+
+LOS = compute_los(UE, UN, UZ)
+
+fig, ax = plt.subplots(1, 1, figsize=(6, 5))
+fig.suptitle('LOS displacement (Sentinel-1, ascending)', fontsize=10)
+im = ax.imshow(LOS, cmap='RdBu_r', origin='upper')
+plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label='m')
+ax.set_title('LOS (m)')
+ax.axis('off')
+plt.tight_layout()
+plt.savefig('okada_los.png', dpi=150, bbox_inches='tight')
+plt.show()
