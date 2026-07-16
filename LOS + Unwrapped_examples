@@ -1,0 +1,571 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from math import sqrt, sin, cos, atan, log, pi, radians
+
+eps = 0.0000001
+
+def okada85(e, n, depth, strike, dip, L, W, U1, U2, U3, nu=0.25):
+    strike = strike*pi/180
+    delta  = dip*pi/180
+    x = cos(strike)*n + sin(strike)*e
+    y = sin(strike)*n - cos(strike)*e
+    p = y*cos(delta) + depth*sin(delta)
+    q = y*sin(delta) - depth*cos(delta)
+    ux = -U1/(2*pi) * chinnery(ux_ss,x,p,L,W,q,delta,nu) \
+        - U2/(2*pi) * chinnery(ux_ds,x,p,L,W,q,delta,nu) \
+        + U3/(2*pi) * chinnery(ux_tf,x,p,L,W,q,delta,nu)
+    uy = -U1/(2*pi) * chinnery(uy_ss,x,p,L,W,q,delta,nu) \
+        - U2/(2*pi) * chinnery(uy_ds,x,p,L,W,q,delta,nu) \
+        + U3/(2*pi) * chinnery(uy_tf,x,p,L,W,q,delta,nu)
+    uz = -U1/(2*pi) * chinnery(uz_ss,x,p,L,W,q,delta,nu) \
+        - U2/(2*pi) * chinnery(uz_ds,x,p,L,W,q,delta,nu) \
+        + U3/(2*pi) * chinnery(uz_tf,x,p,L,W,q,delta,nu)
+    ue = sin(strike)*ux - cos(strike)*uy
+    un = cos(strike)*ux + sin(strike)*uy
+    return (ue, un, uz)
+
+def chinnery(f, x, p, L, W, q, delta, nu):
+    return f(x,p,q,delta,nu) - f(x,p-W,q,delta,nu) - f(x-L,p,q,delta,nu) + f(x-L,p-W,q,delta,nu)
+
+def I1(xi,eta,q,delta,nu,R):
+    db = eta*sin(delta) - q*cos(delta)
+    if cos(delta) > eps:
+        return (1-2*nu)*(-xi/(cos(delta)*(R+db))) - sin(delta)/cos(delta)*I5(xi,eta,q,delta,nu,R,db)
+    else:
+        return -(1-2*nu)/2 * xi*q/(R+db)**2
+
+def I2(eta,q,delta,nu,R):
+    return (1-2*nu)*(-log(R+eta)) - I3(eta,q,delta,nu,R)
+
+def I3(eta,q,delta,nu,R):
+    yb = eta*cos(delta) + q*sin(delta)
+    db = eta*sin(delta) - q*cos(delta)
+    if cos(delta) > eps:
+        return (1-2*nu)*(yb/(cos(delta)*(R+db)) - log(R+eta)) + sin(delta)/cos(delta)*I4(db,eta,q,delta,nu,R)
+    else:
+        return (1-2*nu)/2*(eta/(R+db) + yb*q/(R+db)**2 - log(R+eta))
+
+def I4(db,eta,q,delta,nu,R):
+    if cos(delta) > eps:
+        return (1-2*nu)*1/cos(delta)*(log(R+db) - sin(delta)*log(R+eta))
+    else:
+        return -(1-2*nu)*q/(R+db)
+
+def I5(xi,eta,q,delta,nu,R,db):
+    X = sqrt(xi**2 + q**2)
+    if cos(delta) > eps:
+        return (1-2*nu)*2/cos(delta)*atan((eta*(X+q*cos(delta))+X*(R+X)*sin(delta))/(xi*(R+X)*cos(delta)))
+    else:
+        return -(1-2*nu)*xi*sin(delta)/(R+db)
+
+def ux_ss(xi,eta,q,delta,nu):
+    R = sqrt(xi**2+eta**2+q**2)
+    return xi*q/(R*(R+eta)) + atan((xi*eta)/(q*R)) + I1(xi,eta,q,delta,nu,R)*sin(delta)
+
+def uy_ss(xi,eta,q,delta,nu):
+    R = sqrt(xi**2+eta**2+q**2)
+    return (eta*cos(delta)+q*sin(delta))*q/(R*(R+eta)) + q*cos(delta)/(R+eta) + I2(eta,q,delta,nu,R)*sin(delta)
+
+def uz_ss(xi,eta,q,delta,nu):
+    R  = sqrt(xi**2+eta**2+q**2)
+    db = eta*sin(delta) - q*cos(delta)
+    return db*q/(R*(R+eta)) + q*sin(delta)/(R+eta) + I4(db,eta,q,delta,nu,R)*sin(delta)
+
+def ux_ds(xi,eta,q,delta,nu):
+    R = sqrt(xi**2+eta**2+q**2)
+    return q/R - I3(eta,q,delta,nu,R)*sin(delta)*cos(delta)
+
+def uy_ds(xi,eta,q,delta,nu):
+    R = sqrt(xi**2+eta**2+q**2)
+    return (eta*cos(delta)+q*sin(delta))*q/(R*(R+xi)) + cos(delta)*atan((xi*eta)/(q*R)) - I1(xi,eta,q,delta,nu,R)*sin(delta)*cos(delta)
+
+def uz_ds(xi,eta,q,delta,nu):
+    R  = sqrt(xi**2+eta**2+q**2)
+    db = eta*sin(delta) - q*cos(delta)
+    return db*q/(R*(R+xi)) + sin(delta)*atan((xi*eta)/(q*R)) - I5(xi,eta,q,delta,nu,R,db)*sin(delta)*cos(delta)
+
+def ux_tf(xi,eta,q,delta,nu):
+    R = sqrt(xi**2+eta**2+q**2)
+    return q**2/(R*(R+eta)) - I3(eta,q,delta,nu,R)*sin(delta)**2
+
+def uy_tf(xi,eta,q,delta,nu):
+    R = sqrt(xi**2+eta**2+q**2)
+    return -(eta*sin(delta)-q*cos(delta))*q/(R*(R+xi)) - sin(delta)*(xi*q/(R*(R+eta)) - atan((xi*eta)/(q*R))) - I1(xi,eta,q,delta,nu,R)*sin(delta)**2
+
+def uz_tf(xi,eta,q,delta,nu):
+    R  = sqrt(xi**2+eta**2+q**2)
+    db = eta*sin(delta) - q*cos(delta)
+    return (eta*cos(delta)+q*sin(delta))*q/(R*(R+xi)) + cos(delta)*(xi*q/(R*(R+eta)) - atan((xi*eta)/(q*R))) - I5(xi,eta,q,delta,nu,R,db)*sin(delta)**2
+
+
+def compute_los(UE, UN, UZ, inc_deg=38.0, heading_deg=-166.0):
+    inc  = np.radians(inc_deg)
+    head = np.radians(heading_deg)
+    eE =  np.sin(inc) * np.sin(head)
+    eN = -np.sin(inc) * np.cos(head)
+    eZ =  np.cos(inc)
+    return eE*UE + eN*UN + eZ*UZ
+
+def wrap(los, wavelength=0.055):
+    return np.mod(los + wavelength/4, wavelength/2) - wavelength/4
+
+
+# ─────────────────────────────────────────────────────────────────
+# L, W IQR and W/L aspect-ratio IQR, split by magnitude bin.
+# Both computed from Wells & Coppersmith (1994) 
+#
+# LOWER bin (M 4.5-6.0): smaller, typically buried ruptures
+#   SS (n=39): L=[4.15,13.5]   ratio=[0.55,1.02]
+#   N  (n=9) : L=[3.8,15.0]    ratio=[0.67,1.29]
+#   R  (n=7) : L=[6.5,8.0]     ratio=[0.57,0.79]
+#   OB (n=27): L=[4.0,13.0]    ratio=[0.58,1.03]
+#
+# UPPER bin (M 6.0+): bigger, more surface-proximal ruptures
+#   SS (n=10): L=[16.0,29.5]   ratio=[0.31,0.66]
+#   N  (n=6) : L=[26.25,56.25] ratio=[0.28,0.62]
+#   R  (n=7) : L=[35.0,49.0]   ratio=[0.42,0.56]
+#   OB (n=8) : L=[12.25,20.25] ratio=[0.56,0.77]
+#
+# n is small for N/R in both bins -- treat as indicative, not exact.
+# ─────────────────────────────────────────────────────────────────
+MAG_BINS = {
+    'lower': dict(
+        mag_range=(4.5, 6.0),
+        L_RANGES={
+            'SS': (4.15, 13.5),
+            'N':  (3.8, 15.0),
+            'R':  (6.5, 8.0),
+            'OB': (4.0, 13.0),
+        },
+        RATIO_RANGES={
+            'SS': (0.55, 1.02),
+            'N':  (0.67, 1.29),
+            'R':  (0.57, 0.79),
+            'OB': (0.58, 1.03),
+        },
+        top_depth_range=(2.0, 15.0),   # buried
+    ),
+    'upper': dict(
+        mag_range=(6.0, 7.5),
+        L_RANGES={
+            'SS': (16.00, 29.50),
+            'N':  (26.25, 56.25),
+            'R':  (35.00, 49.00),
+            'OB': (12.25, 20.25),
+        },
+        RATIO_RANGES={
+            'SS': (0.31, 0.66),
+            'N':  (0.28, 0.62),
+            'R':  (0.42, 0.56),
+            'OB': (0.56, 0.77),
+        },
+        top_depth_range=(0.0, 2.0),    # near-surface
+    ),
+}
+
+
+def sample_LW(rng, slip_key, bin_name):
+    b = MAG_BINS[bin_name]
+    L = rng.uniform(*b['L_RANGES'][slip_key])
+    ratio = rng.uniform(*b['RATIO_RANGES'][slip_key])
+    return L, L*ratio
+
+
+def sample_source_near_surface(rng, force_type=None, force_mag_bin=None):
+    """
+    L, W, and depth regime all depend on which magnitude bin is drawn
+    ('lower' ~ M4.5-6.0, buried induced-seismicity scale; 'upper' ~
+    M6.0-7.5, larger near-surface ruptures). Each bin has its own
+    per-fault-type L IQR and W/L aspect-ratio IQR from the empirical
+    data, so geometry stays internally consistent with the sampled
+    magnitude instead of mixing scales.
+    """
+    strike = rng.uniform(0.0, 360.0)
+    bin_name = force_mag_bin if force_mag_bin is not None else rng.choice(['lower', 'upper'], p=[0.65, 0.35])
+    b = MAG_BINS[bin_name]
+    M = rng.uniform(*b['mag_range'])
+
+    source_type = force_type if force_type is not None else rng.choice([0, 1, 3], p=[0.40, 0.35, 0.25])
+
+    if source_type == 0:
+        dip = rng.uniform(75.0, 88.0)
+        L, W = sample_LW(rng, 'SS', bin_name)
+        U1 = rng.uniform(-2.0, 2.0); U2 = 0.0; U3 = 0.0
+        source_label = 'Strike-slip'
+    elif source_type == 1:
+        rake = rng.choice([90.0, -90.0])
+        dip = rng.uniform(30.0, 65.0)
+        if rake == 90.0:
+            L, W = sample_LW(rng, 'R', bin_name)
+            U2 = rng.uniform(1.0, 2.0)
+        else:
+            L, W = sample_LW(rng, 'N', bin_name)
+            U2 = rng.uniform(-2.0, -1.0)
+        U1 = 0.0; U3 = 0.0
+        source_label = 'Dip-slip'
+    else:
+        dip = rng.uniform(55.0, 75.0)
+        L, W = sample_LW(rng, 'OB', bin_name)
+        # SS component is ~2.5x louder in surface LOS amplitude than DS
+        # for equal slip (empirically verified, not dip-dependent --
+        # genuine Okada Green's function asymmetry). Compensate so the
+        # combined pattern shows both characters, not just SS.
+        U1 = rng.uniform(-2.0, 2.0)
+        U2 = rng.uniform(-2.0, 2.0) * 2.5
+        U3 = 0.0
+        source_label = 'SS + DS'
+
+    top_depth = rng.uniform(*b['top_depth_range'])
+    depth = top_depth + W * sin(radians(dip))   # bottom-edge depth (okada85 convention)
+
+    return dict(source_label=source_label, mag_bin=bin_name, M=M, strike=strike, dip=dip,
+                L=L, W=W, U1=U1, U2=U2, U3=U3,
+                top_depth=top_depth, depth=depth)
+
+
+# ─────────────────────────────────────────────────────────────────
+# DIKE geometry, derived from Sigmundsson et al. (2015, Nature) --
+# Bárðarbunga/Holuhraun rifting event, Extended Data Fig. 2b, 11
+# dyke segments defined by relocated seismicity. W here = down-dip
+# extent (depth_max - depth_min per segment), ratio = W/L.
+#   L IQR:         [2.95, 7.45] km   (median 4.80)
+#   W IQR:         [1.50, 3.00] km   (median 3.00)
+#   ratio W/L IQR: [0.36, 0.91]      (median 0.71)
+#   top_depth IQR: [3.75, 5.00] km   (median 5.00)
+# dip: 83-89 deg across all 11 segments (near-vertical, consistent
+# with Rubin 1995 review: "most dikes in the upper crust are near
+# vertical").
+# Opening (U3) calibrated against Wright et al. (2006, Nature) --
+# Dabbahu dyke, Afar: average opening 3.5 m, max 8.0 m (up to 15 m
+# in the zone between magma chambers, treated here as a rare
+# outlier, not the typical range).
+# n=11 segments from a single rifting event -- indicative, not a
+# broad statistical sample across many dikes worldwide.
+# ─────────────────────────────────────────────────────────────────
+DIKE_PARAMS = dict(
+    L_range=(2.95, 7.45),
+    ratio_range=(0.36, 0.91),
+    top_depth_range=(3.75, 5.00),
+    dip_range=(83.0, 89.0),
+    U3_range=(0.5, 3.5),   # m; typical opening scale (Dabbahu average 3.5 m)
+)
+
+
+def sample_dike_LW(rng):
+    L = rng.uniform(*DIKE_PARAMS['L_range'])
+    ratio = rng.uniform(*DIKE_PARAMS['ratio_range'])
+    return L, L * ratio
+
+
+def sample_dike_source(rng, variant='pure'):
+    """
+    variant: 'pure', 'ss', 'ds', 'ss_ds'
+      'pure'  -- pure dike (tensile opening only)
+      'ss'    -- dike + small strike-slip component
+      'ds'    -- dike + small dip-slip component
+      'ss_ds' -- dike + small strike-slip + small dip-slip
+    Small shear components are +-15% of U3, same convention as
+    earlier versions of this pipeline.
+    """
+    strike = rng.uniform(0.0, 360.0)
+    dip = rng.uniform(*DIKE_PARAMS['dip_range'])
+    L, W = sample_dike_LW(rng)
+    top_depth = rng.uniform(*DIKE_PARAMS['top_depth_range'])
+    U3 = rng.uniform(*DIKE_PARAMS['U3_range'])
+
+    if variant == 'pure':
+        U1 = 0.0; U2 = 0.0
+        source_label = 'Dike'
+    elif variant == 'ss':
+        U1 = rng.uniform(-0.15, 0.15) * U3; U2 = 0.0
+        source_label = 'Dike + small SS'
+    elif variant == 'ds':
+        U1 = 0.0; U2 = rng.uniform(-0.15, 0.15) * U3
+        source_label = 'Dike + small DS'
+    else:  # 'ss_ds'
+        U1 = rng.uniform(-0.15, 0.15) * U3
+        U2 = rng.uniform(-0.15, 0.15) * U3
+        source_label = 'Dike + small SS + small DS'
+
+    depth = top_depth + W * sin(radians(dip))   # bottom-edge depth (okada85 convention)
+
+    return dict(source_label=source_label, strike=strike, dip=dip,
+                L=L, W=W, U1=U1, U2=U2, U3=U3,
+                top_depth=top_depth, depth=depth)
+
+
+def compute_unwrapped_los(source, half_extent=30, n_pts=200,
+                           inc_deg=38.0, heading_deg=-166.0):
+    x_m = np.linspace(-half_extent, half_extent, n_pts)
+    UE = np.zeros((n_pts, n_pts)); UN = np.zeros((n_pts, n_pts)); UZ = np.zeros((n_pts, n_pts))
+    for i, n_val in enumerate(x_m):
+        for j, e_val in enumerate(x_m):
+            ue, un, uz = okada85(e_val, n_val, source['depth'], source['strike'], source['dip'],
+                                  source['L'], source['W'], source['U1'], source['U2'], source['U3'])
+            UE[i,j] = ue; UN[i,j] = un; UZ[i,j] = uz
+    return compute_los(UE, UN, UZ, inc_deg, heading_deg)
+
+
+# ─────────────────────────────────────────────────────────────────
+# Unified sampler: all 7 source types in one function, same
+# probability weights as the original pipeline.
+#   0 = Strike-slip           (Wells & Coppersmith, mag-binned)
+#   1 = Dip-slip (N or R)     (Wells & Coppersmith, mag-binned)
+#   2 = Dike (pure)           (Sigmundsson/Wright-calibrated)
+#   3 = SS + DS (oblique)     (Wells & Coppersmith, mag-binned)
+#   4 = Dike + small SS       (Sigmundsson/Wright-calibrated)
+#   5 = Dike + small DS       (Sigmundsson/Wright-calibrated)
+#   6 = Dike + small SS + DS  (Sigmundsson/Wright-calibrated)
+# ─────────────────────────────────────────────────────────────────
+def sample_source(rng):
+    source_type = rng.choice(
+        [0, 1, 2, 3, 4, 5, 6],
+        p=[0.25, 0.25, 0.10, 0.20, 0.08, 0.08, 0.04]
+    )
+
+    if source_type == 0:
+        return sample_source_near_surface(rng, force_type=0)
+    elif source_type == 1:
+        return sample_source_near_surface(rng, force_type=1)
+    elif source_type == 3:
+        return sample_source_near_surface(rng, force_type=3)
+    elif source_type == 2:
+        return sample_dike_source(rng, variant='pure')
+    elif source_type == 4:
+        return sample_dike_source(rng, variant='ss')
+    elif source_type == 5:
+        return sample_dike_source(rng, variant='ds')
+    else:  # source_type == 6
+        return sample_dike_source(rng, variant='ss_ds')
+
+
+def plot_random_examples(n_per_type=3, half_extent=40, n_pts=220, savepath=None):
+    rng = np.random.default_rng()
+    types = [(0, 'Strike-slip'), (1, 'Dip-slip'), (3, 'SS + DS')]
+
+    fig, axes = plt.subplots(len(types), n_per_type, figsize=(4.3*n_per_type, 4.3*len(types)))
+
+    for row, (source_type, type_label) in enumerate(types):
+        for col in range(n_per_type):
+            source = sample_source_near_surface(rng, force_type=source_type)
+            LOS = compute_unwrapped_los(source, half_extent, n_pts)
+            wrapped = wrap(LOS)
+            ax = axes[row, col]
+            im = ax.imshow(wrapped, cmap='hsv', origin='lower',
+                            extent=[-half_extent, half_extent, -half_extent, half_extent])
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label='m')
+            ax.set_title(f"{type_label} (M={source['M']:.1f}, {source['mag_bin']})\n"
+                         f"strike={source['strike']:.0f}° dip={source['dip']:.0f}° "
+                         f"L={source['L']:.1f} W={source['W']:.1f} top_depth={source['top_depth']:.2f}",
+                         fontsize=8)
+            ax.set_xlabel('E (km)'); ax.set_ylabel('N (km)')
+
+    plt.suptitle('Near-surface, M6+ scale random examples — wrapped interferogram', fontsize=13)
+    plt.tight_layout()
+    if savepath:
+        plt.savefig(savepath, dpi=140, bbox_inches='tight')
+        print(f'saved {savepath}')
+    plt.show()
+
+
+def plot_dike_examples(n_per_variant=3, half_extent=15, n_pts=220, savepath=None):
+    rng = np.random.default_rng()
+    variants = [('pure', 'Dike'), ('ss', 'Dike + small SS'),
+                ('ds', 'Dike + small DS'), ('ss_ds', 'Dike + small SS + small DS')]
+
+    fig, axes = plt.subplots(len(variants), n_per_variant,
+                              figsize=(4.3*n_per_variant, 4.3*len(variants)))
+
+    for row, (variant, label) in enumerate(variants):
+        for col in range(n_per_variant):
+            source = sample_dike_source(rng, variant=variant)
+            LOS = compute_unwrapped_los(source, half_extent, n_pts)
+            wrapped = wrap(LOS)
+            ax = axes[row, col]
+            im = ax.imshow(wrapped, cmap='hsv', origin='lower',
+                            extent=[-half_extent, half_extent, -half_extent, half_extent])
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label='m')
+            ax.set_title(f"{label}\nstrike={source['strike']:.0f}° dip={source['dip']:.0f}° "
+                         f"L={source['L']:.1f} W={source['W']:.1f} "
+                         f"top_depth={source['top_depth']:.2f} U3={source['U3']:.2f}m",
+                         fontsize=8)
+            ax.set_xlabel('E (km)'); ax.set_ylabel('N (km)')
+
+    plt.suptitle('Dike source examples (Bárðarbunga/Dabbahu-calibrated) — wrapped interferogram',
+                 fontsize=13)
+    plt.tight_layout()
+    if savepath:
+        plt.savefig(savepath, dpi=140, bbox_inches='tight')
+        print(f'saved {savepath}')
+    plt.show()
+
+
+def plot_random_unwrapped(n_examples=9, half_extent=30, n_pts=220, savepath=None):
+    """
+    Draw n_examples random sources from ALL 7 types (using original
+    probability weights) and plot unwrapped LOS displacement (m) --
+    continuous colormap, not phase-wrapped fringes.
+    """
+    rng = np.random.default_rng()
+    ncols = 3
+    nrows = int(np.ceil(n_examples / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4.5*ncols, 4.2*nrows))
+    axes = np.array(axes).reshape(-1)
+
+    for i in range(n_examples):
+        source = sample_source(rng)
+        LOS = compute_unwrapped_los(source, half_extent, n_pts)
+        ax = axes[i]
+        vmax = np.max(np.abs(LOS)) or 1
+        im = ax.imshow(LOS, cmap='RdBu_r', origin='lower', vmin=-vmax, vmax=vmax,
+                        extent=[-half_extent, half_extent, -half_extent, half_extent])
+        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label='m')
+
+        mag_str = f"M={source['M']:.2f}  " if 'M' in source else ""
+        title = (f"{source['source_label']}\n"
+                 f"{mag_str}strike={source['strike']:.0f}°  dip={source['dip']:.0f}°\n"
+                 f"depth={source['depth']:.2f}km  L={source['L']:.2f}km  W={source['W']:.2f}km\n"
+                 f"U1={source['U1']:.2f}m  U2={source['U2']:.2f}m  U3={source['U3']:.2f}m")
+        ax.set_title(title, fontsize=7.5)
+        ax.set_xlabel('E (km)'); ax.set_ylabel('N (km)')
+
+    for j in range(n_examples, len(axes)):
+        axes[j].axis('off')
+
+    plt.suptitle('Random examples across all 7 source types — Unwrapped LOS (m)', fontsize=13)
+    plt.tight_layout()
+    if savepath:
+        plt.savefig(savepath, dpi=140, bbox_inches='tight')
+        print(f'saved {savepath}')
+    plt.show()
+
+
+def plot_all_examples(half_extent=30, n_pts=220, savepath=None):
+    """
+    One example for EACH of the 7 source types, and for types that
+    have a magnitude bin (strike-slip, dip-slip, SS+DS) show both
+    the lower (M4.5-6.0) and upper (M6.0-7.5) bin -- 10 panels total.
+    Dike-family types have no magnitude bin, so just one example each.
+    """
+    rng = np.random.default_rng()
+
+    jobs = [
+        ('Strike-slip (lower M)', lambda: sample_source_near_surface(rng, force_type=0, force_mag_bin='lower')),
+        ('Strike-slip (upper M)', lambda: sample_source_near_surface(rng, force_type=0, force_mag_bin='upper')),
+        ('Dip-slip (lower M)',    lambda: sample_source_near_surface(rng, force_type=1, force_mag_bin='lower')),
+        ('Dip-slip (upper M)',    lambda: sample_source_near_surface(rng, force_type=1, force_mag_bin='upper')),
+        ('SS + DS (lower M)',     lambda: sample_source_near_surface(rng, force_type=3, force_mag_bin='lower')),
+        ('SS + DS (upper M)',     lambda: sample_source_near_surface(rng, force_type=3, force_mag_bin='upper')),
+        ('Dike',                  lambda: sample_dike_source(rng, variant='pure')),
+        ('Dike + small SS',       lambda: sample_dike_source(rng, variant='ss')),
+        ('Dike + small DS',       lambda: sample_dike_source(rng, variant='ds')),
+        ('Dike + small SS + DS',  lambda: sample_dike_source(rng, variant='ss_ds')),
+    ]
+
+    ncols = 5
+    nrows = int(np.ceil(len(jobs) / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4.5*ncols, 4.4*nrows))
+    axes = np.array(axes).reshape(-1)
+
+    for i, (panel_label, sampler) in enumerate(jobs):
+        source = sampler()
+        LOS = compute_unwrapped_los(source, half_extent, n_pts)
+        ax = axes[i]
+        vmax = np.max(np.abs(LOS)) or 1
+        im = ax.imshow(LOS, cmap='RdBu_r', origin='lower', vmin=-vmax, vmax=vmax,
+                        extent=[-half_extent, half_extent, -half_extent, half_extent])
+        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label='m')
+
+        mag_str = f"M={source['M']:.2f}  " if 'M' in source else ""
+        title = (f"{panel_label}\n"
+                 f"{mag_str}strike={source['strike']:.0f}°  dip={source['dip']:.0f}°\n"
+                 f"depth={source['depth']:.2f}km  L={source['L']:.2f}km  W={source['W']:.2f}km\n"
+                 f"U1={source['U1']:.2f}m  U2={source['U2']:.2f}m  U3={source['U3']:.2f}m")
+        ax.set_title(title, fontsize=7.5)
+        ax.set_xlabel('E (km)'); ax.set_ylabel('N (km)')
+
+    for j in range(len(jobs), len(axes)):
+        axes[j].axis('off')
+
+    plt.suptitle('One example per source type (+ magnitude bin where applicable) — Unwrapped LOS (m)',
+                 fontsize=13)
+    plt.tight_layout()
+    if savepath:
+        plt.savefig(savepath, dpi=140, bbox_inches='tight')
+        print(f'saved {savepath}')
+    plt.show()
+
+
+def plot_all_examples_wrapped_unwrapped(half_extent=30, n_pts=220, savepath=None):
+    """
+    Same 10 source-type examples as plot_all_examples(), but for each
+    one shows a pair of panels: unwrapped LOS (continuous, metres)
+    next to wrapped LOS (interferometric fringes) -- computed from
+    the SAME sampled source, so the two panels are directly comparable.
+    """
+    rng = np.random.default_rng()
+
+    jobs = [
+        ('Strike-slip (lower M)', lambda: sample_source_near_surface(rng, force_type=0, force_mag_bin='lower')),
+        ('Strike-slip (upper M)', lambda: sample_source_near_surface(rng, force_type=0, force_mag_bin='upper')),
+        ('Dip-slip (lower M)',    lambda: sample_source_near_surface(rng, force_type=1, force_mag_bin='lower')),
+        ('Dip-slip (upper M)',    lambda: sample_source_near_surface(rng, force_type=1, force_mag_bin='upper')),
+        ('SS + DS (lower M)',     lambda: sample_source_near_surface(rng, force_type=3, force_mag_bin='lower')),
+        ('SS + DS (upper M)',     lambda: sample_source_near_surface(rng, force_type=3, force_mag_bin='upper')),
+        ('Dike',                  lambda: sample_dike_source(rng, variant='pure')),
+        ('Dike + small SS',       lambda: sample_dike_source(rng, variant='ss')),
+        ('Dike + small DS',       lambda: sample_dike_source(rng, variant='ds')),
+        ('Dike + small SS + DS',  lambda: sample_dike_source(rng, variant='ss_ds')),
+    ]
+
+    pairs_per_row = 2       # 2 (unwrapped, wrapped) pairs side by side per row
+    ncols = pairs_per_row * 2
+    nrows = int(np.ceil(len(jobs) / pairs_per_row))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4.6*ncols, 4.4*nrows))
+    axes = np.array(axes).reshape(nrows, ncols)
+
+    for i, (panel_label, sampler) in enumerate(jobs):
+        source = sampler()
+        LOS = compute_unwrapped_los(source, half_extent, n_pts)
+        WRAPPED = wrap(LOS)
+
+        row = i // pairs_per_row
+        base_col = (i % pairs_per_row) * 2
+        ax_u = axes[row, base_col]
+        ax_w = axes[row, base_col + 1]
+
+        mag_str = f"M={source['M']:.2f}  " if 'M' in source else ""
+        info = (f"{panel_label}\n{mag_str}strike={source['strike']:.0f}° dip={source['dip']:.0f}°\n"
+                f"depth={source['depth']:.2f}km L={source['L']:.2f}km W={source['W']:.2f}km\n"
+                f"U1={source['U1']:.2f}m U2={source['U2']:.2f}m U3={source['U3']:.2f}m")
+
+        vmax = np.max(np.abs(LOS)) or 1
+        im_u = ax_u.imshow(LOS, cmap='RdBu_r', origin='lower', vmin=-vmax, vmax=vmax,
+                            extent=[-half_extent, half_extent, -half_extent, half_extent])
+        plt.colorbar(im_u, ax=ax_u, fraction=0.046, pad=0.04, label='m')
+        ax_u.set_title(info + "\nUnwrapped LOS", fontsize=7)
+        ax_u.set_xlabel('E (km)'); ax_u.set_ylabel('N (km)')
+
+        im_w = ax_w.imshow(WRAPPED, cmap='hsv', origin='lower',
+                            extent=[-half_extent, half_extent, -half_extent, half_extent])
+        plt.colorbar(im_w, ax=ax_w, fraction=0.046, pad=0.04, label='m')
+        ax_w.set_title(info + "\nWrapped LOS", fontsize=7)
+        ax_w.set_xlabel('E (km)'); ax_w.set_ylabel('N (km)')
+
+    # hide any unused axes (if len(jobs) doesn't fill the grid exactly)
+    total_used_cols_last_row = (len(jobs) - (nrows-1)*pairs_per_row) * 2
+    for c in range(total_used_cols_last_row, ncols):
+        axes[nrows-1, c].axis('off')
+
+    plt.suptitle('Unwrapped vs wrapped LOS for each source type (+ magnitude bin) — same sampled source per pair',
+                 fontsize=13)
+    plt.tight_layout()
+    if savepath:
+        plt.savefig(savepath, dpi=140, bbox_inches='tight')
+        print(f'saved {savepath}')
+    plt.show()
+
+
+if __name__ == '__main__':
+    plot_all_examples(savepath='all_types_all_bins.png')
+    plot_all_examples_wrapped_unwrapped(savepath='all_types_wrapped_unwrapped.png')
